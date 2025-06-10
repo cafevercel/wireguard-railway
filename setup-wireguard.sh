@@ -8,35 +8,70 @@ NC='\033[0m' # No Color
 
 echo -e "${GREEN}🚀 Iniciando configuración de WireGuard...${NC}"
 
-# Crear directorio de configuración si no existe
+# Crear directorios necesarios
 mkdir -p /config/wg_confs
 mkdir -p /config/peer_confs
+mkdir -p /config/keys
 
-# Función para obtener IP pública
-get_public_ip() {
-    # Intentar varios servicios para obtener IP pública
-    PUBLIC_IP=$(curl -s --connect-timeout 5 ifconfig.me || \
-               curl -s --connect-timeout 5 ipinfo.io/ip || \
-               curl -s --connect-timeout 5 icanhazip.com || \
-               echo "auto")
-    echo $PUBLIC_IP
+# Verificar si ya existe configuración
+if [ -f /config/wg_confs/wg0.conf ] && [ -f /config/keys/server_private.key ]; then
+    echo -e "${YELLOW}📋 Configuración existente encontrada, reutilizando...${NC}"
+    
+    # Mostrar configuraciones existentes
+    show_existing_configs
+    
+    echo -e "${GREEN}🚀 Iniciando WireGuard con configuración existente...${NC}"
+    exec /init
+else
+    echo -e "${YELLOW}🆕 Primera ejecución, generando nuevas configuraciones...${NC}"
+    generate_new_configs
+fi
+
+# Función para mostrar configuraciones existentes
+show_existing_configs() {
+    echo -e "\n${GREEN}📋 CONFIGURACIONES EXISTENTES:${NC}\n"
+    
+    for conf_file in /config/peer_confs/peer*.conf; do
+        if [ -f "$conf_file" ]; then
+            client_name=$(basename "$conf_file" .conf)
+            echo -e "${YELLOW}🔧 Configuración para ${client_name}:${NC}"
+            echo "----------------------------------------"
+            cat "$conf_file"
+            echo "----------------------------------------"
+            
+            # Mostrar QR si existe
+            qr_file="/config/peer_confs/${client_name}_qr.txt"
+            if [ -f "$qr_file" ]; then
+                echo -e "\n${YELLOW}📱 Código QR para ${client_name}:${NC}"
+                cat "$qr_file"
+            fi
+            echo -e "\n"
+        fi
+    done
 }
 
-# Función para generar configuración del servidor
-generate_server_config() {
+# Función para generar nuevas configuraciones
+generate_new_configs() {
+    # Función para obtener IP pública
+    get_public_ip() {
+        PUBLIC_IP=$(curl -s --connect-timeout 5 ifconfig.me || \
+                   curl -s --connect-timeout 5 ipinfo.io/ip || \
+                   curl -s --connect-timeout 5 icanhazip.com || \
+                   echo "auto")
+        echo $PUBLIC_IP
+    }
+
     echo -e "${YELLOW}📝 Generando configuración del servidor...${NC}"
     
-    # Generar clave privada del servidor si no existe
-    if [ ! -f /config/server_private.key ]; then
-        wg genkey > /config/server_private.key
-        chmod 600 /config/server_private.key
-    fi
+    # Generar clave privada del servidor
+    wg genkey > /config/keys/server_private.key
+    chmod 600 /config/keys/server_private.key
     
     # Generar clave pública del servidor
-    cat /config/server_private.key | wg pubkey > /config/server_public.key
+    cat /config/keys/server_private.key | wg pubkey > /config/keys/server_public.key
     
-    SERVER_PRIVATE_KEY=$(cat /config/server_private.key)
-    SERVER_PUBLIC_KEY=$(cat /config/server_public.key)
+    SERVER_PRIVATE_KEY=$(cat /config/keys/server_private.key)
+    SERVER_PUBLIC_KEY=$(cat /config/keys/server_public.key)
     
     # Obtener IP pública
     PUBLIC_IP=$(get_public_ip)
@@ -55,30 +90,23 @@ ListenPort = ${SERVERPORT}
 PrivateKey = ${SERVER_PRIVATE_KEY}
 
 EOF
-}
 
-# Función para generar configuración de clientes
-generate_client_configs() {
+    # Generar configuraciones de clientes
     echo -e "${YELLOW}👥 Generando configuraciones de clientes...${NC}"
-    
-    SERVER_PUBLIC_KEY=$(cat /config/server_public.key)
-    PUBLIC_IP=$(get_public_ip)
     
     for i in $(seq 1 ${PEERS}); do
         CLIENT_NAME="peer${i}"
         CLIENT_IP="${INTERNAL_SUBNET%.*}.$((i + 1))"
         
-        # Generar claves del cliente si no existen
-        if [ ! -f /config/peer_confs/${CLIENT_NAME}_private.key ]; then
-            wg genkey > /config/peer_confs/${CLIENT_NAME}_private.key
-            chmod 600 /config/peer_confs/${CLIENT_NAME}_private.key
-        fi
+        # Generar claves del cliente
+        wg genkey > /config/keys/${CLIENT_NAME}_private.key
+        chmod 600 /config/keys/${CLIENT_NAME}_private.key
         
         # Generar clave pública del cliente
-        cat /config/peer_confs/${CLIENT_NAME}_private.key | wg pubkey > /config/peer_confs/${CLIENT_NAME}_public.key
+        cat /config/keys/${CLIENT_NAME}_private.key | wg pubkey > /config/keys/${CLIENT_NAME}_public.key
         
-        CLIENT_PRIVATE_KEY=$(cat /config/peer_confs/${CLIENT_NAME}_private.key)
-        CLIENT_PUBLIC_KEY=$(cat /config/peer_confs/${CLIENT_NAME}_public.key)
+        CLIENT_PRIVATE_KEY=$(cat /config/keys/${CLIENT_NAME}_private.key)
+        CLIENT_PUBLIC_KEY=$(cat /config/keys/${CLIENT_NAME}_public.key)
         
         # Agregar peer al servidor
         cat >> /config/wg_confs/wg0.conf << EOF
@@ -107,49 +135,19 @@ EOF
         
         echo -e "${GREEN}✅ Cliente ${CLIENT_NAME} configurado (IP: ${CLIENT_IP})${NC}"
     done
-}
-
-# Función para mostrar configuraciones
-show_configs() {
-    echo -e "\n${GREEN}📋 CONFIGURACIONES GENERADAS:${NC}\n"
     
-    for i in $(seq 1 ${PEERS}); do
-        CLIENT_NAME="peer${i}"
-        
-        echo -e "${YELLOW}🔧 Configuración para ${CLIENT_NAME}:${NC}"
-        echo "----------------------------------------"
-        cat /config/peer_confs/${CLIENT_NAME}.conf
-        echo "----------------------------------------"
-        
-        echo -e "\n${YELLOW}📱 Código QR para ${CLIENT_NAME}:${NC}"
-        cat /config/peer_confs/${CLIENT_NAME}_qr.txt
-        echo -e "\n"
-    done
-    
-    echo -e "${GREEN}💾 Archivos guardados en /config/peer_confs/${NC}"
-    echo -e "${GREEN}📁 Configuración del servidor en /config/wg_confs/wg0.conf${NC}"
-}
-
-# Función principal
-main() {
-    echo -e "${GREEN}🔧 Configurando WireGuard con los siguientes parámetros:${NC}"
-    echo -e "   Peers: ${PEERS}"
-    echo -e "   Puerto: ${SERVERPORT}"
-    echo -e "   DNS: ${PEERDNS}"
-    echo -e "   Subred: ${INTERNAL_SUBNET}"
-    echo -e "   IPs permitidas: ${ALLOWEDIPS}"
-    echo ""
-    
-    # Generar configuraciones
-    generate_server_config
-    generate_client_configs
-    show_configs
+    # Mostrar configuraciones generadas
+    show_existing_configs
     
     echo -e "${GREEN}🚀 Iniciando WireGuard...${NC}"
-    
-    # Iniciar WireGuard
     exec /init
 }
 
-# Ejecutar función principal
-main
+# Función principal
+echo -e "${GREEN}🔧 Configurando WireGuard con los siguientes parámetros:${NC}"
+echo -e "   Peers: ${PEERS}"
+echo -e "   Puerto: ${SERVERPORT}"
+echo -e "   DNS: ${PEERDNS}"
+echo -e "   Subred: ${INTERNAL_SUBNET}"
+echo -e "   IPs permitidas: ${ALLOWEDIPS}"
+echo ""

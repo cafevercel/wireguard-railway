@@ -25,8 +25,5 @@ ENV SERVERPORT=51820
 # Exponer puerto UDP
 EXPOSE 51820/udp
 
-# Volumen para persistir configuración
-VOLUME ["/config"]
-
-# Comando de inicio
+# Comando de inicio (sin VOLUME)
 CMD ["/usr/local/bin/setup-wireguard.sh"]
