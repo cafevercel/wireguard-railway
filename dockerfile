@@ -8,7 +8,7 @@ RUN apk add --no-cache \
     iptables \
     iproute2
 
-# Crear script de configuración personalizada
+# Crear script de configuracuuuión personalizada
 COPY setup-wireguard.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/setup-wireguard.sh
 
