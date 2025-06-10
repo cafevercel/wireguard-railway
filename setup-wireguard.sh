@@ -16,10 +16,7 @@ mkdir -p /config/keys
 # Verificar si ya existe configuración
 if [ -f /config/wg_confs/wg0.conf ] && [ -f /config/keys/server_private.key ]; then
     echo -e "${YELLOW}📋 Configuración existente encontrada, reutilizando...${NC}"
-    
-    # Mostrar configuraciones existentes
     show_existing_configs
-    
     echo -e "${GREEN}🚀 Iniciando WireGuard con configuración existente...${NC}"
     exec /init
 else
@@ -38,14 +35,8 @@ show_existing_configs() {
             echo "----------------------------------------"
             cat "$conf_file"
             echo "----------------------------------------"
-            
-            # Mostrar QR si existe
-            qr_file="/config/peer_confs/${client_name}_qr.txt"
-            if [ -f "$qr_file" ]; then
-                echo -e "\n${YELLOW}📱 Código QR para ${client_name}:${NC}"
-                cat "$qr_file"
-            fi
-            echo -e "\n"
+            echo -e "\n${YELLOW}💡 Para generar código QR, visita: https://qr-code-generator.com${NC}"
+            echo -e "${YELLOW}   Y pega la configuración de arriba${NC}\n"
         fi
     done
 }
@@ -130,15 +121,13 @@ AllowedIPs = ${ALLOWEDIPS}
 PersistentKeepalive = 25
 EOF
         
-        # Generar código QR
-        qrencode -t ansiutf8 < /config/peer_confs/${CLIENT_NAME}.conf > /config/peer_confs/${CLIENT_NAME}_qr.txt
-        
         echo -e "${GREEN}✅ Cliente ${CLIENT_NAME} configurado (IP: ${CLIENT_IP})${NC}"
     done
     
     # Mostrar configuraciones generadas
     show_existing_configs
     
+    echo -e "${GREEN}💾 Todas las configuraciones guardadas en /config/peer_confs/${NC}"
     echo -e "${GREEN}🚀 Iniciando WireGuard...${NC}"
     exec /init
 }
