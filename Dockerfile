@@ -1,10 +1,9 @@
 FROM linuxserver/wireguard:latest
 
-# Instalar herramientas necesarias
+# Instalar herramientas necesarias (sin qrencode)
 RUN apk add --no-cache \
     curl \
     jq \
-    qrencode \
     iptables \
     iproute2
 
@@ -25,5 +24,5 @@ ENV SERVERPORT=51820
 # Exponer puerto UDP
 EXPOSE 51820/udp
 
-# Comando de inicio (sin VOLUME)
+# Comando de inicio
 CMD ["/usr/local/bin/setup-wireguard.sh"]
