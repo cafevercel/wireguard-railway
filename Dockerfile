@@ -1,28 +1,41 @@
-FROM linuxserver/wireguard:latest
+FROM alpine:latest
 
-# Instalar herramientas necesarias (sin qrencode)
+# Instalar WireGuard y herramientas
 RUN apk add --no-cache \
+    wireguard-tools \
     curl \
     jq \
     iptables \
-    iproute2
+    iproute2 \
+    bash \
+    openrc
 
-# Crear script de configuración personalizada
-COPY setup-wireguard.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/setup-wireguard.sh
+# Crear usuario wireguard
+RUN addgroup -g 1000 wireguard && \
+    adduser -D -u 1000 -G wireguard -s /bin/bash wireguard
 
-# Variables de entorno por defecto
-ENV PUID=1000
-ENV PGID=1000
-ENV TZ=America/Havana
+# Crear directorios
+RUN mkdir -p /config /app && \
+    chown -R wireguard:wireguard /config /app
+
+# Copiar script
+COPY setup-wireguard.sh /app/
+RUN chmod +x /app/setup-wireguard.sh && \
+    chown wireguard:wireguard /app/setup-wireguard.sh
+
+# Variables de entorno
 ENV PEERS=1
 ENV PEERDNS=1.1.1.1,8.8.8.8
 ENV INTERNAL_SUBNET=10.13.13.0
 ENV ALLOWEDIPS=0.0.0.0/0
 ENV SERVERPORT=51820
 
-# Exponer puerto UDP
+# Exponer puerto
 EXPOSE 51820/udp
 
+# Cambiar a usuario wireguard
+USER wireguard
+WORKDIR /app
+
 # Comando de inicio
-CMD ["/usr/local/bin/setup-wireguard.sh"]
+CMD ["./setup-wireguard.sh"]
